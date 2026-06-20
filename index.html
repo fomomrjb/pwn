@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pwn.work.gd</title>
+<style>
+  :root{
+    --bg:#0b0b0b;
+    --eink:#e8e6df;          /* e-ink paper */
+    --eink-ink:#111;
+    --panel:#101410;
+    --green:#37ff8b;
+    --green-dim:#1f7d47;
+    --line:#1c241c;
+    --mono:'Courier New',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);
+    color:var(--green);
+    font-family:var(--mono);
+    display:flex;
+    min-height:100vh;
+    flex-wrap:wrap;
+  }
+
+  /* ---------- LEFT: pwnagotchi e-ink screen ---------- */
+  .device{
+    flex:1 1 460px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:32px 20px;
+    gap:18px;
+  }
+  .screen{
+    width:100%;
+    max-width:520px;
+    background:var(--eink);
+    color:var(--eink-ink);
+    border-radius:10px;
+    border:2px solid #000;
+    box-shadow:0 0 0 6px #1a1a1a, 0 18px 40px rgba(0,0,0,.6);
+    font-family:var(--mono);
+    overflow:hidden;
+  }
+  .screen .top,
+  .screen .bottom{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    padding:6px 10px;
+    border-bottom:1px solid #000;
+  }
+  .screen .bottom{border-top:1px solid #000;border-bottom:none}
+  .face{
+    text-align:center;
+    font-size:64px;
+    font-weight:bold;
+    padding:26px 10px 10px;
+    letter-spacing:2px;
+  }
+  .speech{
+    text-align:center;
+    font-size:16px;
+    padding:0 14px 22px;
+    min-height:22px;
+  }
+  .name{font-weight:bold}
+  .device .caption{font-size:12px;color:var(--green-dim);text-align:center;max-width:520px}
+
+  /* ---------- RIGHT: cracked panel ---------- */
+  .panel{
+    flex:1 1 380px;
+    background:var(--panel);
+    border-left:1px solid var(--line);
+    padding:24px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  .panel h1{
+    font-size:15px;
+    letter-spacing:3px;
+    margin:0;
+    color:var(--green);
+    text-transform:uppercase;
+  }
+  .panel .sub{font-size:12px;color:var(--green-dim);margin:-6px 0 6px}
+  .loader{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .btn{
+    display:inline-block;
+    border:1px solid var(--green-dim);
+    border-radius:6px;
+    padding:7px 12px;
+    font-size:12px;
+    color:var(--green);
+    cursor:pointer;
+    user-select:none;
+  }
+  .btn:hover{background:rgba(55,255,139,.08)}
+  .loadstat{font-size:11px;color:var(--green-dim)}
+  .stats{display:flex;gap:10px;flex-wrap:wrap}
+  .stat{
+    flex:1 1 90px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:8px 10px;
+  }
+  .stat .n{font-size:22px;font-weight:bold}
+  .stat .l{font-size:10px;color:var(--green-dim);letter-spacing:1px;text-transform:uppercase}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{
+    text-align:left;
+    font-size:10px;
+    letter-spacing:1px;
+    color:var(--green-dim);
+    text-transform:uppercase;
+    border-bottom:1px solid var(--line);
+    padding:6px 8px;
+  }
+  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:hover td{background:rgba(55,255,139,.05)}
+  .ssid{color:var(--green);font-weight:bold}
+  .pass{color:#fff}
+  .bssid{color:var(--green-dim);font-size:11px}
+  .foot{margin-top:auto;font-size:11px;color:var(--green-dim);text-align:center}
+  a{color:var(--green)}
+  .blink{animation:b 1.1s steps(2) infinite}
+  @keyframes b{50%{opacity:0}}
+
+  /* ---------- password gate ---------- */
+  #gate{
+    position:fixed;inset:0;z-index:50;
+    background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+  }
+  #gate.hidden{display:none}
+  .gate-box{
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:34px 30px;
+    text-align:center;
+    width:min(340px,90vw);
+  }
+  .gate-face{font-size:46px;margin-bottom:8px}
+  .gate-title{font-size:16px;letter-spacing:3px}
+  .gate-sub{font-size:12px;color:var(--green-dim);margin:4px 0 18px}
+  #gate-input{
+    width:100%;
+    background:#000;
+    border:1px solid var(--green-dim);
+    border-radius:6px;
+    color:var(--green);
+    font-family:var(--mono);
+    font-size:16px;
+    padding:10px 12px;
+    text-align:center;
+    letter-spacing:3px;
+  }
+  #gate-go{
+    margin-top:12px;width:100%;
+    background:var(--green-dim);
+    border:none;border-radius:6px;
+    color:#001b0c;font-family:var(--mono);font-weight:bold;
+    font-size:14px;padding:10px;cursor:pointer;letter-spacing:2px;
+  }
+  #gate-go:hover{background:var(--green)}
+  #gate-err{color:#ff6b6b;font-size:12px;min-height:16px;margin-top:10px}
+</style>
+</head>
+<body>
+
+  <!-- ===== Password gate (obscurity only — see note in JS) ===== -->
+  <div id="gate">
+    <div class="gate-box">
+      <div class="gate-face">(⌐■_■)</div>
+      <div class="gate-title">pwn.work.gd</div>
+      <div class="gate-sub">enter access key</div>
+      <input id="gate-input" type="password" autocomplete="off" placeholder="••••••••" autofocus>
+      <button id="gate-go">unlock</button>
+      <div id="gate-err"></div>
+    </div>
+  </div>
+
+  <!-- ===== Pwnagotchi screen ===== -->
+  <section class="device">
+    <div class="screen">
+      <div class="top">
+        <span>CH <span id="ch">1</span></span>
+        <span>APS <span id="aps">0</span> (<span id="apstot">0</span>)</span>
+        <span id="up">UP 00:00:00</span>
+      </div>
+
+      <div class="face" id="face">(◕‿◕)</div>
+      <div class="speech" id="speech">Hi! I'm <span class="name">pwn.work.gd</span></div>
+
+      <div class="bottom">
+        <span>PWND <span id="pwnd">0</span> (<span id="pwndtot">0</span>)</span>
+        <span id="mode">AUTO</span>
+        <span>♥ <span id="lvl">0</span></span>
+      </div>
+    </div>
+    <div class="caption">pwn.work.gd &middot; pwnagotchi web ui &middot; sniffing for handshakes<span class="blink">_</span></div>
+  </section>
+
+  <!-- ===== Cracked panel ===== -->
+  <aside class="panel">
+    <h1>Cracked Handshakes</h1>
+    <div class="sub">captured networks &amp; recovered keys</div>
+
+    <div class="loader">
+      <label class="btn">📂 Load hashcat.potfile
+        <input type="file" id="potfile" accept=".potfile,.txt,.hc22000,.pot" hidden>
+      </label>
+      <span id="loadstat" class="loadstat">showing demo data</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="n" id="s-nets">0</div><div class="l">networks</div></div>
+      <div class="stat"><div class="n" id="s-pwnd">0</div><div class="l">pwned</div></div>
+      <div class="stat"><div class="n" id="s-up">0h</div><div class="l">uptime</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>SSID</th><th>Password</th></tr>
+      </thead>
+      <tbody id="rows"><!-- filled by JS --></tbody>
+    </table>
+
+    <div class="foot">pwn.work.gd &mdash; for demo / educational display only</div>
+  </aside>
+
+<script>
+/* ====================================================================
+   EDIT THIS LIST — these are the "cracked" networks shown on the side.
+   Add / remove rows freely. (bssid is optional.)
+   ==================================================================== */
+const CRACKED = [
+  { ssid:"HOME-5G-A1B2",     pass:"sunset-river-42",   bssid:"A4:2B:8C:11:90:FE" },
+  { ssid:"NETGEAR_guest",    pass:"password123",       bssid:"C0:FF:EE:14:88:21" },
+  { ssid:"Starbucks_WiFi",   pass:"latte2024",         bssid:"DE:AD:BE:EF:00:07" },
+  { ssid:"Linksys00451",     pass:"admin-admin",       bssid:"00:14:22:01:23:45" },
+  { ssid:"FBI_Surveillance", pass:"youarewatched",     bssid:"13:37:13:37:13:37" },
+  { ssid:"TP-LINK_8842",     pass:"qwerty!2025",       bssid:"50:C7:BF:88:42:09" },
+];
+
+/* ====================================================================
+   ACCESS KEY — change this to whatever you want.
+   NOTE: this is OBSCURITY, not real security. Anyone who opens
+   "view source" can read this value. It just stops casual visitors.
+   Set to "" (empty) to disable the gate entirely.
+   ==================================================================== */
+const ACCESS_KEY = "pwned";
+
+(function gate(){
+  const g   = document.getElementById('gate');
+  const inp = document.getElementById('gate-input');
+  const err = document.getElementById('gate-err');
+  if(!ACCESS_KEY){ g.classList.add('hidden'); return; }
+  function tryUnlock(){
+    if(inp.value === ACCESS_KEY){ g.classList.add('hidden'); }
+    else { err.textContent = 'access denied'; inp.value=''; inp.focus(); }
+  }
+  document.getElementById('gate-go').addEventListener('click', tryUnlock);
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
+})();
+
+/* ---- render the cracked table ---- */
+const rows = document.getElementById('rows');
+let NETWORKS = CRACKED;            // current data being shown (demo by default)
+
+function render(list){
+  NETWORKS = list;
+  rows.innerHTML = list.map(n => `
+    <tr>
+      <td><span class="ssid">${esc(n.ssid)}</span>
+          ${n.bssid?`<br><span class="bssid">${esc(n.bssid)}</span>`:''}</td>
+      <td><span class="pass">${esc(n.pass)}</span></td>
+    </tr>`).join('');
+  document.getElementById('s-nets').textContent = list.length;
+  document.getElementById('s-pwnd').textContent = list.length;
+  document.getElementById('pwndtot').textContent = list.length;
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---- hex (e.g. 484f4d45) -> text (HOME) ---- */
+function hexToStr(h){
+  if(!h) return '';
+  let s='';
+  for(let i=0;i<h.length;i+=2) s+=String.fromCharCode(parseInt(h.substr(i,2),16));
+  return s;
+}
+function fmtMac(h){ return (h.match(/../g)||[]).join(':').toUpperCase(); }
+
+/* ---- parse a real hashcat mode-22000 potfile ----
+   line looks like:  WPA*02*<mic>*<apmac>*<stamac>*<essidHEX>*...:password   */
+function parsePotfile(text){
+  const out=[];
+  text.split(/\r?\n/).forEach(line=>{
+    line=line.trim();
+    if(!line) return;
+    const cut=line.lastIndexOf(':');
+    if(cut<0) return;
+    const hash=line.slice(0,cut), pass=line.slice(cut+1);
+    const f=hash.split('*');
+    if(f.length>=6 && /^WPA/i.test(f[0])){
+      out.push({ ssid:hexToStr(f[5])||'(hidden)', pass, bssid:fmtMac(f[3]) });
+    } else {
+      // not a WPA line — just show whatever:password
+      out.push({ ssid:hash, pass, bssid:'' });
+    }
+  });
+  return out;
+}
+
+/* ---- file picker: load the real loot ---- */
+document.getElementById('potfile').addEventListener('change', e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    const nets=parsePotfile(r.result);
+    const stat=document.getElementById('loadstat');
+    if(nets.length){
+      render(nets);
+      stat.textContent=`✓ ${nets.length} real keys from ${file.name}`;
+      stat.style.color='var(--green)';
+    } else {
+      stat.textContent='no cracked lines found in that file';
+      stat.style.color='#ff6b6b';
+    }
+  };
+  r.readAsText(file);
+});
+
+/* ---- live-ish numbers on screen + stats ---- */
+const total = CRACKED.length;
+const start = Date.now();
+const faces  = ["(◕‿◕)","(⌐■_■)","(•‿‿•)","(☼‿☼)","(°▃▃°)","(✜‿‿✜)"];
+const lines  = ["sniffing the air...","got a juicy handshake!","cracking keys...",
+                "feeding on wifi...","new friend pwned!","hack the planet!"];
+
+function pad(n){return String(n).padStart(2,'0');}
+function tick(){
+  const s = Math.floor((Date.now()-start)/1000);
+  const h=Math.floor(s/3600), m=Math.floor(s%3600/60), sec=s%60;
+  document.getElementById('up').textContent = `UP ${pad(h)}:${pad(m)}:${pad(sec)}`;
+  document.getElementById('s-up').textContent = `${h}h`;
+}
+function randomize(){
+  const n   = NETWORKS.length;
+  const aps = 1+Math.floor(Math.random()*40);
+  document.getElementById('ch').textContent     = 1+Math.floor(Math.random()*11);
+  document.getElementById('aps').textContent    = aps;
+  document.getElementById('apstot').textContent = aps+n;
+  document.getElementById('pwnd').textContent   = n?Math.floor(Math.random()*n):0;
+  document.getElementById('pwndtot').textContent= n;
+  document.getElementById('lvl').textContent    = 1+Math.floor(Math.random()*9);
+  document.getElementById('face').textContent   = faces[Math.floor(Math.random()*faces.length)];
+  document.getElementById('speech').innerHTML   = lines[Math.floor(Math.random()*lines.length)];
+}
+
+render(CRACKED);                 // start on demo data until a potfile is loaded
+setInterval(tick,1000);  tick();
+setInterval(randomize,2500); randomize();
+</script>
+</body>
+</html>
